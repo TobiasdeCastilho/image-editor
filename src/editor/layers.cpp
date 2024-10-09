@@ -3,9 +3,9 @@
 #include <map>
 #include <opencv4/opencv2/opencv.hpp>
 
-#include "../../utils/conversion.cpp"
+#include "../utils/conversion.cpp"
 
-namespace IMG
+namespace Editor
 {		
 	enum filter_type {
 		NONE,

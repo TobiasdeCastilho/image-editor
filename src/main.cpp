@@ -13,8 +13,8 @@
 
 //project
 #include "utils/conversion.cpp"
-#include "screens/mainmenu.cpp"
-#include "classes/screens/image.cpp"
+#include "editor/mainmenu.cpp"
+#include "editor/layers.cpp"
 
 void prepare(GLFWwindow *window)
 {
@@ -46,7 +46,7 @@ void close(GLFWwindow *window)
 
 bool config_opened = false;
 
-IMG::ImageManager manager;
+Editor::ImageManager manager;
 
 int main(int, char **)
 {
@@ -63,20 +63,22 @@ int main(int, char **)
 	prepare(window);		
 
 	std::string image_path = "/home/tobias/Imagens/Capturas de tela/abapuru.png";		
-	manager.layers_add(IMG::FILTER, "BLUR");
-	manager.layers_add(IMG::FILTER, "SHARPEN");
+	manager.layers_add(Editor::FILTER, "BLUR");
+	manager.layers_add(Editor::FILTER, "SHARPEN");
 	manager.load_image(image_path);
 		
-	manager.list_layers([](std::string name, IMG::Layer* layer, int *count) {		
-		IMG::FilterLayer* filter = dynamic_cast<IMG::FilterLayer*>(layer);	
+	manager.list_layers([](std::string name, Editor::Layer* layer, int *count) {		
+		Editor::FilterLayer* filter = dynamic_cast<Editor::FilterLayer*>(layer);	
 			std::cout << name << std::endl;
 		if(*count == 0)
-			filter->set_filter(IMG::BLUR);					
+			filter->set_filter(Editor::BLUR);					
 		else
-			filter->set_filter(IMG::SHARPEN);
+			filter->set_filter(Editor::SHARPEN);
 	});
 	manager.process_layers();
 	
+	char _pop_layer_name[100] = "";		
+
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -101,8 +103,8 @@ int main(int, char **)
 		ImGui::Begin("right", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		ImGui::SetWindowSize(ImVec2(300, display_h - 20));							
 		ImGui::SetWindowPos(ImVec2(display_w - 300, 20));
-		
-		manager.list_layers([](std::string name, IMG::Layer* layer, int *count) {		
+
+		manager.list_layers([](std::string name, Editor::Layer* layer, int *count) {		
 			ImGui::Text("%s", name.c_str());							
 			ImGui::SameLine();
 
@@ -112,7 +114,7 @@ int main(int, char **)
 				layer->set_active(!layer->get_active());
 				manager.process_layers();				
 			}
-		});		
+		});				
 		ImGui::End();
 		
 		ImGui::Begin("main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);						
