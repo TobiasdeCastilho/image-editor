@@ -14,6 +14,7 @@
 //project
 #include "utils/conversion.cpp"
 #include "screens/mainmenu.cpp"
+#include "classes/screens/image.cpp"
 
 void prepare(GLFWwindow *window)
 {
@@ -45,6 +46,8 @@ void close(GLFWwindow *window)
 
 bool config_opened = false;
 
+IMG::ImageManager manager;
+
 int main(int, char **)
 {
 	glfwSetErrorCallback(
@@ -57,14 +60,22 @@ int main(int, char **)
 	int display_w = 1280, display_h = 720;
 	GLFWwindow *window = glfwCreateWindow(display_w, display_h, "Client", nullptr, nullptr);	
 	if (window == nullptr) exit(1);
-	prepare(window);	
+	prepare(window);		
 
-	std::string image_path = "/home/tobias/Imagens/Capturas de tela/abapuru.png";
-	cv::Mat img = cv::imread(image_path, cv::IMREAD_COLOR);
-	cv::cvtColor(img, img, cv::COLOR_BGR2RGBA);
-	
-	GLuint texture;
-	cvmat_to_gluint(img, &texture);
+	std::string image_path = "/home/tobias/Imagens/Capturas de tela/abapuru.png";		
+	manager.layers_add(IMG::FILTER, "BLUR");
+	manager.layers_add(IMG::FILTER, "SHARPEN");
+	manager.load_image(image_path);
+		
+	manager.list_layers([](std::string name, IMG::Layer* layer, int *count) {		
+		IMG::FilterLayer* filter = dynamic_cast<IMG::FilterLayer*>(layer);	
+			std::cout << name << std::endl;
+		if(*count == 0)
+			filter->set_filter(IMG::BLUR);					
+		else
+			filter->set_filter(IMG::SHARPEN);
+	});
+	manager.process_layers();
 	
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	while (!glfwWindowShouldClose(window)) {
@@ -88,15 +99,27 @@ int main(int, char **)
 		ImGui::End();	
 
 		ImGui::Begin("right", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-		ImGui::SetWindowSize(ImVec2(300, display_h - 20));					
+		ImGui::SetWindowSize(ImVec2(300, display_h - 20));							
 		ImGui::SetWindowPos(ImVec2(display_w - 300, 20));
+		
+		manager.list_layers([](std::string name, IMG::Layer* layer, int *count) {		
+			ImGui::Text("%s", name.c_str());							
+			ImGui::SameLine();
+
+			std::string button_name = std::string((layer->get_active() ? "Deactivate" : "Activate")) + "##" + name;
+
+			if(ImGui::Button(button_name.c_str())) {			
+				layer->set_active(!layer->get_active());
+				manager.process_layers();				
+			}
+		});		
 		ImGui::End();
 		
 		ImGui::Begin("main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);						
-		ImGui::SetWindowSize(ImVec2(display_w - 300, display_h - 20));
+		ImGui::SetWindowSize(ImVec2(display_w - 340, display_h - 20));
 		ImGui::SetWindowPos(ImVec2(40,20));								
-		ImGui::SetCursorPos(ImVec2(display_w / 2 - 300, display_h / 2 - 300));
-		ImGui::Image((void*)(intptr_t)texture, ImVec2(600, 600));
+		ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() / 2 - 300, ImGui::GetWindowHeight() / 2 - 300));		
+		ImGui::Image((void*)(intptr_t)manager.get_texture(), ImVec2(600, 600));
 		ImGui::End();
 
     ImGui::Render();    
