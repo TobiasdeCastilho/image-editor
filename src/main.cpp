@@ -12,9 +12,13 @@
 #include "imgui_impl_opengl3.h"
 
 //project
-#include "utils/conversion.cpp"
-#include "editor/mainmenu.cpp"
+#include "utils/image.cpp"
+#include "editor/gui.cpp"
 #include "editor/layers.cpp"
+
+Editor::GroupLayer manager;
+int display_w = 1280, display_h = 720;
+GLFWwindow *window;
 
 void prepare(GLFWwindow *window)
 {
@@ -44,42 +48,8 @@ void close(GLFWwindow *window)
 	glfwTerminate();
 }
 
-bool config_opened = false;
-
-Editor::ImageManager manager;
-
-int main(int, char **)
-{
-	glfwSetErrorCallback(
-		[](int error, const char *description) {
-			fprintf(stderr, "GLFW Error %d: %s\n", error, description);
-		}
-	);	
-	if (!glfwInit()) exit(1);
-
-	int display_w = 1280, display_h = 720;
-	GLFWwindow *window = glfwCreateWindow(display_w, display_h, "Client", nullptr, nullptr);	
-	if (window == nullptr) exit(1);
-	prepare(window);		
-
-	std::string image_path = "/home/tobias/Imagens/Capturas de tela/abapuru.png";		
-	manager.layers_add(Editor::FILTER, "BLUR");
-	manager.layers_add(Editor::FILTER, "SHARPEN");
-	manager.load_image(image_path);
-		
-	manager.list_layers([](std::string name, Editor::Layer* layer, int *count) {		
-		Editor::FilterLayer* filter = dynamic_cast<Editor::FilterLayer*>(layer);	
-			std::cout << name << std::endl;
-		if(*count == 0)
-			filter->set_filter(Editor::BLUR);					
-		else
-			filter->set_filter(Editor::SHARPEN);
-	});
-	manager.process_layers();
-	
-	char _pop_layer_name[100] = "";		
-
-	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+void main_window(){
+ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
@@ -93,7 +63,7 @@ int main(int, char **)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();							    		
 
-		append_menu(display_w);
+		Editor::append_menu(display_w);
 
 		ImGui::Begin("left", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		ImGui::SetWindowSize(ImVec2(40, display_h - 20));
@@ -103,26 +73,20 @@ int main(int, char **)
 		ImGui::Begin("right", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		ImGui::SetWindowSize(ImVec2(300, display_h - 20));							
 		ImGui::SetWindowPos(ImVec2(display_w - 300, 20));
-
-		manager.list_layers([](std::string name, Editor::Layer* layer, int *count) {		
-			ImGui::Text("%s", name.c_str());							
-			ImGui::SameLine();
-
-			std::string button_name = std::string((layer->get_active() ? "Deactivate" : "Activate")) + "##" + name;
-
-			if(ImGui::Button(button_name.c_str())) {			
-				layer->set_active(!layer->get_active());
-				manager.process_layers();				
-			}
-		});				
+		
+		Editor::append_group_control(manager, "group");
+		Editor::append_new_layer_menu(manager);
+		manager.process();
 		ImGui::End();
 		
 		ImGui::Begin("main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);						
 		ImGui::SetWindowSize(ImVec2(display_w - 340, display_h - 20));
 		ImGui::SetWindowPos(ImVec2(40,20));								
 		ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() / 2 - 300, ImGui::GetWindowHeight() / 2 - 300));		
-		ImGui::Image((void*)(intptr_t)manager.get_texture(), ImVec2(600, 600));
+		ImGui::Image((void*)(intptr_t)manager.get(), ImVec2(work_width, work_height));
 		ImGui::End();
+
+		manager.process();
 
     ImGui::Render();    
     glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -135,6 +99,23 @@ int main(int, char **)
 	}
 
 	close(window);
+}
+
+int main(int, char **)
+{
+	glfwSetErrorCallback(
+		[](int error, const char *description) {
+			fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+		}
+	);	
+	if (!glfwInit()) exit(1);
+	
+	window = glfwCreateWindow(display_w, display_h, "Client", nullptr, nullptr);	
+	if (window == nullptr) exit(1);
+	prepare(window);	
+	
+	main_window();		
+								
 
 	return 0;
 }
