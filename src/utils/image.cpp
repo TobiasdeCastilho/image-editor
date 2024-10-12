@@ -37,21 +37,25 @@ void cvmat_to_gluint(const cv::Mat mat, GLuint* texture_id) {
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mat.cols, mat.rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, mat.data);  
 }
 
-void overlay(cv::Mat& main, const cv::Mat& overlay, int pos_x, int pos_y) {
-    // Certificar-se de que as coordenadas de sobreposição estão dentro dos limites da imagem principal
-    if (pos_x >= main.cols || pos_y >= main.rows) {
-        std::cerr << "Posição de sobreposição fora dos limites da imagem principal!" << std::endl;
-        return;
-    }
+void overlay(cv::Mat& main, const cv::Mat& overlay, int pos_x, int pos_y, int opacity) {    
+  int overlay_start_x = std::max(0, -pos_x);
+  int overlay_start_y = std::max(0, -pos_y);
 
-    int width = std::min(overlay.cols, main.cols - pos_x);
-    int height = std::min(overlay.rows, main.rows - pos_y);
+  int main_start_x = std::max(0, pos_x);
+  int main_start_y = std::max(0, pos_y);
 
-    cv::Rect roi_main(pos_x, pos_y, width, height);
-    cv::Rect roi_overlay(0, 0, width, height);
+  int width = std::min(overlay.cols - overlay_start_x, main.cols - main_start_x);
+  int height = std::min(overlay.rows - overlay_start_y, main.rows - main_start_y);
 
-    cv::Mat main_roi = main(roi_main);
-    cv::Mat overlay_roi = overlay(roi_overlay);
-    
-    cv::addWeighted(main_roi, 1.0, overlay_roi, 1.0, 0.0, main_roi);
+  if (width <= 0 || height <= 0)
+    return;
+
+  cv::Rect roi_main(main_start_x, main_start_y, width, height);
+  cv::Rect roi_overlay(overlay_start_x, overlay_start_y, width, height);
+
+  cv::Mat main_roi = main(roi_main);
+  cv::Mat overlay_roi = overlay(roi_overlay);		
+
+  cv::addWeighted(main_roi, 1.0 - (opacity / 100.0), overlay_roi, opacity / 100.0, 0.0, main_roi);
+
 }
