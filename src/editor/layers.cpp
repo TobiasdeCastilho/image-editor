@@ -17,13 +17,15 @@ namespace Editor
 		EDGE,
 		EMBOSS,
 		SHARPEN,
-		THRESHOLD
+		THRESHOLD,
+		GRAY
 	};
 
 	enum layer_type {
 		FILTER,
 		GROUP,
-		IMAGE
+		IMAGE,
+		POINT
 	};
 
 	class Layer {
@@ -96,6 +98,9 @@ namespace Editor
 						cv::threshold(gray, *img, *this->intensity, 255, cv::THRESH_BINARY);
 						cv::cvtColor(*img, *img, cv::COLOR_GRAY2RGBA);
 						break;
+					case GRAY:						
+						cv::cvtColor(*img, gray, cv::COLOR_RGBA2GRAY);						
+						break;					
 					default:
 						break;
 				}
@@ -106,14 +111,21 @@ namespace Editor
 
   class ImageLayer : public Layer {
 		private:			
-			cv::Mat img;	
 			cv::Mat display_img;
 			std::string file;								
+			int last_rotation = 0;			
+			int last_width = 0;
+			int last_height = 0;
+			float last_scale = 0;
 		public:		
+			cv::Mat img;	
 			int *pos_x = new int(0);
 			int *pos_y = new int(0);
 			int *width = new int(0);
 			int *height = new int(0);
+			int *rotation = new int(0);
+			int *opacity = new int(100);
+			float *scale = new float(1);
 
 			ImageLayer(std::string file = "") : Layer(IMAGE) {
 				if(!file.empty()) {					
@@ -142,18 +154,103 @@ namespace Editor
 				if(!*this->height)
 					*this->height = 1;													
 
-				if(*this->width != this->img.cols || *this->height != this->img.rows) {
+				if(*this->width != this->last_width || *this->height != this->last_height || *this->rotation != this->last_rotation || *this->scale != this->last_scale) {
 					this->display_img.release();
-					cv::resize(this->img, this->display_img, cv::Size(*this->width, *this->height));				
-				}
+					this->display_img = this->img.clone();
+																				
+					cv::resize(this->display_img, this->display_img, cv::Size(*this->width * (*this->scale), *this->height * (*this->scale)));
+					cv::Point2f center(this->display_img.cols / 2.0, this->display_img.rows / 2.0);			
+					cv::Mat rot_mat = cv::getRotationMatrix2D(center, *this->rotation, 1.0);					
+					cv::warpAffine(this->display_img, this->display_img, rot_mat, this->display_img.size());					
+
+					cv::RotatedRect rotatedRect(center, cv::Size2f(*this->width, *this->height), *this->rotation);					
+					cv::Point2f vertices[4];
+					rotatedRect.points(vertices);
+					std::vector<cv::Point> vertices_int;
+					for (int i = 0; i < 4; ++i)
+					  vertices_int.push_back(cv::Point(static_cast<int>(vertices[i].x), static_cast<int>(vertices[i].y)));															
+
+					this->last_rotation = *this->rotation;
+					this->last_width = *this->width;
+					this->last_height = *this->height;				
+					this->last_scale = *this->scale;	
+				}				
 				
 				return this->display_img;
 			}			
 
 			std::string get_file() {
 				return this->file;
+			}			
+
+			void reset(){				
+				*this->width = this->img.cols;
+				*this->height = this->img.rows;
+				*this->rotation = 0;
+				*this->opacity = 100;
+				*this->scale = 1;
+				*this->pos_x = 0;
+				*this->pos_y = 0;
 			}
 	};
+
+	struct _Point {
+		int x, y;
+	};
+	typedef struct _Point Point;
+	class PointLayer: public Layer {
+		public:		
+			Point points[4];
+			float *scale = new float(1);
+			int *rotation = new int(0);			
+
+			PointLayer() : Layer(POINT) {
+				for (int i = 0; i < 4; i++) {
+					points[i].x = -1;
+					points[i].y = -1;
+				}
+			}
+			
+			virtual bool __process(cv::Mat* img) {		    
+		    cv::Point2f center(img->cols / 2.0f, img->rows / 2.0f);
+
+				float pos_x = -1, pos_y = -1;
+		    for (Point _point : points) {
+	        if (_point.x == -1 && _point.y == -1)
+	            continue;
+	        
+	        float scaled_x = _point.x * *this->scale;
+	        float scaled_y = _point.y * *this->scale;
+
+	        cv::Point2f scaled_point(scaled_x, scaled_y);
+
+	        float rad = *this->rotation * CV_PI / 180.0;
+	        float cos_theta = cos(rad);
+	        float sin_theta = sin(rad);
+
+	        float rotated_x = cos_theta * (scaled_point.x - center.x) - sin_theta * (scaled_point.y - center.y) + center.x;
+	        float rotated_y = sin_theta * (scaled_point.x - center.x) + cos_theta * (scaled_point.y - center.y) + center.y;
+
+	        cv::circle(*img, cv::Point(rotated_x, rotated_y), 5, cv::Scalar(0, 0, 255), -1);
+					pos_x = rotated_x;
+					pos_y = rotated_y;		    
+					if(pos_x != -1 || pos_y != -1)
+						cv::line(*img, cv::Point(rotated_x, rotated_y), cv::Point(rotated_x, rotated_y), cv::Scalar(0, 0, 255), 5);				
+		    }
+
+			return true;
+		}
+
+		void reset(){
+			for (int i = 0; i < 4; i++) {
+				points[i].x = -1;
+				points[i].y = -1;
+			}
+			*rotation = 0;
+			*scale = 1;
+		}
+
+	};	
 
 	class GroupLayer : public Layer {
 		private:
@@ -162,21 +259,37 @@ namespace Editor
 			cv::Mat display_img;
 			GLuint texture_id;
 		public:		
+			bool changed = false;
+
 			GroupLayer() : Layer(GROUP) {
 				this->img = cv::Mat(work_height, work_width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
 			};
 
+			~GroupLayer() {
+				this->img.release();
+				this->display_img.release();
+			}
+
 			void add(layer_type type) {                
-		    switch (type) {
+		    std::string file = "";
+				
+				switch (type) {
 	        case FILTER:
             this->layers[this->layers.size()] = std::make_shared<FilterLayer>();
             break;            
 	        case GROUP:
             this->layers[this->layers.size()] = std::make_shared<GroupLayer>();
+            break;                    					
+	        case IMAGE:					
+						file = _dialog_file();
+						if(!file.empty())	
+            	this->layers[this->layers.size()] = std::make_shared<ImageLayer>(file);
             break;                    
-	        case IMAGE:
-            this->layers[this->layers.size()] = std::make_shared<ImageLayer>(_dialog_file());
-            break;                                                
+					case POINT:						
+						this->layers[this->layers.size()] = std::make_shared<PointLayer>();
+						break;
+	        default:
+						break;                            
 		    }                                                
 			}
 
@@ -192,10 +305,22 @@ namespace Editor
 			}
 
 			void remove(int pos) {
+				layers.at(pos).reset();
 				layers.erase(pos);
+
+				int i = 0;
+				for(auto& _layer : layers) {
+					layers[i] = _layer.second;
+					i++;
+				}
 			}
 
-			bool process() {										 				
+			bool process() {				
+				//if(!this->changed)
+				//	return false;
+
+				this->changed = false;
+
 				ImageLayer* image_layer;			
 				this->display_img.release();	
 				this->display_img = this->img.clone();
@@ -217,8 +342,11 @@ namespace Editor
 									continue;
 								}
 
-								overlay(this->display_img, image_layer->get_image(), *image_layer->pos_x, *image_layer->pos_y);																
-								break;
+								overlay(this->display_img, image_layer->get_image(), *image_layer->pos_x, *image_layer->pos_y, *image_layer->opacity);																
+								break;						
+							case POINT:
+								_layer.second->__process(&this->display_img);
+								break;								
 							default:							
 								_layer.second->__process(&this->display_img);
 								break;
@@ -233,6 +361,13 @@ namespace Editor
 
 			int size() {
 				return this->layers.size();
-			}			
+			}						
+
+			void swap(int a, int b) {
+				if(a < 0 || a >= (int)this->layers.size() || b < 0 || b >= (int)this->layers.size())
+					return;				
+
+				std::swap(this->layers[a], this->layers[b]);
+			}
 	};
 }
