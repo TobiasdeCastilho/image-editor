@@ -16,7 +16,6 @@
 #include "editor/gui.cpp"
 #include "editor/layers.cpp"
 
-Editor::GroupLayer manager;
 int display_w = 1280, display_h = 720;
 GLFWwindow *window;
 
@@ -75,18 +74,16 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 		ImGui::SetWindowPos(ImVec2(display_w - 300, 20));
 		
 		Editor::append_group_control(manager, "group");
-		Editor::append_new_layer_menu(manager);
-		manager.process();
+		Editor::append_new_layer_menu();
 		ImGui::End();
 		
+		manager.process();
 		ImGui::Begin("main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);						
 		ImGui::SetWindowSize(ImVec2(display_w - 340, display_h - 20));
 		ImGui::SetWindowPos(ImVec2(40,20));								
 		ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() / 2 - 300, ImGui::GetWindowHeight() / 2 - 300));		
 		ImGui::Image((void*)(intptr_t)manager.get(), ImVec2(work_width, work_height));
 		ImGui::End();
-
-		manager.process();
 
     ImGui::Render();    
     glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -101,8 +98,7 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	close(window);
 }
 
-int main(int, char **)
-{
+int main(int, char **) {
 	glfwSetErrorCallback(
 		[](int error, const char *description) {
 			fprintf(stderr, "GLFW Error %d: %s\n", error, description);
